@@ -1,6 +1,6 @@
 # Freelance_Portal
 
-Certainly! Building a Freelancer Job Portal on the blockchain can be an innovative solution that leverages decentralization, security, and transparency. Below is a high-level design, describing the various components and their interaction.
+Below is a high-level design, describing the various components and their interaction.
 
 ### 1. **User Interface (Frontend)**:
 #### a. **Client Side**:
