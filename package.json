@@ -1,0 +1,26 @@
+{
+  "name": "freelance_portal",
+  "version": "1.0.0",
+  "description": "A freelance portal project",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GovindKRajesh/Freelance_Portal.git"
+  },
+  "author": "Govind K Rajesh",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/GovindKRajesh/Freelance_Portal/issues"
+  },
+  "homepage": "https://github.com/GovindKRajesh/Freelance_Portal#readme",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^3.0.0",
+    "hardhat": "^2.17.1"
+  },
+  "dependencies": {
+    "ethers": "^6.7.0"
+  }
+}
