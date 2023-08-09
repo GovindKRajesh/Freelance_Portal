@@ -40,6 +40,23 @@ contract UserManagement {
         require(users[_userAddress].isRegistered, "User is not registered.");
         return users[_userAddress];
     }
+
+    /**
+     * @dev Check if a user is registered by address.
+     * @param userAddress Address of the user.
+     * @return Boolean indicating whether the user is registered.
+     */
+    function isUserRegistered(address userAddress) public view returns (bool) {
+        return users[userAddress].isRegistered;
+    }
+
+    /**
+     * @dev Check if a user is a freelancer by address.
+     * @param userAddress Address of the user.
+     * @return Boolean indicating whether the user is a freelancer.
+     */
+    function isUserFreelancer(address userAddress) public view returns (bool) {
+        return users[userAddress].isFreelancer;
+    }
     
-    // Additional functions for user management can be added here
 }
