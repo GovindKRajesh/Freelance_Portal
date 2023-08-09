@@ -4,17 +4,25 @@ async function main() {
   // Compile the contract
   await hre.run("compile");
 
-  // Deploy UserManagement contract
-  const userManagement = await hre.ethers.deployContract("UserManagement", []);
-  await userManagement.waitForDeployment();
+  // Deploy User contract
+  const user = await hre.ethers.deployContract("UserManagement", []);
+  await user.waitForDeployment();
 
-  console.log("UserManagement deployed to:", userManagement.target);
+  console.log("UserManagement deployed to:", user.target);
 
-  // Deploy JobManagement contract
-  const jobManagement = await hre.ethers.deployContract("JobManagement", [userManagement.target]);
-  await jobManagement.waitForDeployment();
+  // Deploy Job contract
+  const job = await hre.ethers.deployContract("JobManagement", [user.target]);
+  await job.waitForDeployment();
 
-  console.log("JobManagement deployed to:", jobManagement.target);
+  console.log("Job deployed to:", job.target);
+
+  const USDC_ADDRESS = "0x7cd1840a123f2190424058Ba766F816Ad079e9A6"; // Dummy USDC token address
+
+  // Deploy PaymentManagement contract
+  const payment = await hre.ethers.deployContract("PaymentManagement", [USDC_ADDRESS, job.target]);
+  await payment.waitForDeployment();
+
+  console.log("Payment deployed to:", payment.target);
 }
 
 main().catch((error) => {

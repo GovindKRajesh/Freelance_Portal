@@ -6,10 +6,10 @@ const {
   const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
   const { expect } = require("chai");
 
-describe("UserManagement", function () {
+describe("User", function () {
     async function deployFixture() {
 
-        // Deploying Users.sol
+        // Deploying User.sol
         const user = await hre.ethers.deployContract("UserManagement", []);
         await user.waitForDeployment();
 
@@ -80,14 +80,15 @@ describe("UserManagement", function () {
     });
 });
 
-describe("JobManagement", function () {
+describe("Job", function () {
     async function deployFixture() {
-        // Deploying UserManagement.sol
+
+        // Deploying User.sol
         const userContract = await hre.ethers.deployContract("UserManagement", []);
         await userContract.waitForDeployment();
         const user = userContract.getAddress();
 
-        // Deploying JobManagement.sol
+        // Deploying Job.sol
         const jobContract = await hre.ethers.deployContract("JobManagement", [user]);
         await jobContract.waitForDeployment();
 
@@ -340,7 +341,7 @@ describe("JobManagement", function () {
     });
 
     describe("View Job", function () {
-        
+
         it("Should return the details of a specific job by ID", async function () {
             const { userContract, jobContract } = await loadFixture(deployFixture);
             const [client] = await hre.ethers.getSigners();
@@ -368,6 +369,446 @@ describe("JobManagement", function () {
             expect(jobDetails.payment).to.equal(payment);
             expect(jobDetails.experienceLevel).to.equal(experienceLevel);
             expect(jobDetails.isOpen).to.be.true;
+        });
+    });
+});
+
+describe("Create/Close milestones and make payment", function () {
+    async function deployFixture() {
+
+        const [deployer] = await ethers.getSigners();
+
+        // Deploying USDC.sol
+        const USDC = await hre.ethers.deployContract("USDC", [], deployer);
+        await USDC.waitForDeployment();
+        const usdc = await USDC.getAddress();
+    
+        // Deploying User.sol
+        const userContract = await hre.ethers.deployContract("UserManagement", []);
+        await userContract.waitForDeployment();
+        const user = userContract.getAddress();
+
+        // Deploying Job.sol
+        const jobContract = await hre.ethers.deployContract("JobManagement", [user]);
+        await jobContract.waitForDeployment();
+        const job = jobContract.getAddress();
+    
+        // Deploying Payment.sol
+        const paymentContract = await hre.ethers.deployContract("PaymentManagement", [usdc, job]);
+        await paymentContract.waitForDeployment();
+    
+        return { USDC, userContract, jobContract, paymentContract };
+    }
+
+    describe("Create Milestone", function () {
+        
+        it("Should create a milestone for an open job", async function () {
+            const { USDC, userContract, jobContract, paymentContract } = await deployFixture();
+            const [deployer, client, freelancer] = await ethers.getSigners();
+
+            const usdcDecimals = await USDC.decimals();
+            const transferAmount = BigInt(1000) * BigInt(10) ** usdcDecimals;
+            const paymentContAddress = await paymentContract.getAddress();
+    
+            // Transfer some USDC to the client
+            await USDC.connect(deployer).transfer(client.address, transferAmount);
+    
+            // Client approves PaymentManagement contract to spend USDC
+            await USDC.connect(client).approve(paymentContAddress, transferAmount);
+    
+            // Registering Client and Freelancer wallets
+            await userContract.connect(client).registerUser("Client", "123 A Block B Street", false);
+            await userContract.connect(freelancer).registerUser("Freelancer", "456 C Block D Street", true);
+    
+            const title = "Software Developer";
+            const description = "Develop a DApp";
+            const payment = 1000;
+            const experienceLevel = "Intermediate";
+            await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
+            
+            const jobId = 0;
+            const milestoneAmount = 500;
+            const milestoneDescription = "First Milestone";
+            await expect(paymentContract.connect(client).createMilestone(jobId, milestoneAmount, milestoneDescription))
+                .to.emit(paymentContract, "MilestoneCreated");
+        });
+
+        it("Should revert when creating a milestone for a closed job or using non-client", async function () {
+            const { USDC, userContract, jobContract, paymentContract } = await deployFixture();
+            const [deployer, client, freelancer] = await ethers.getSigners();
+
+            const usdcDecimals = await USDC.decimals();
+            const transferAmount = BigInt(1000) * BigInt(10) ** usdcDecimals;
+            const paymentContAddress = await paymentContract.getAddress();
+    
+            // Transfer some USDC to the client
+            await USDC.connect(deployer).transfer(client.address, transferAmount);
+    
+            // Client approves PaymentManagement contract to spend USDC
+            await USDC.connect(client).approve(paymentContAddress, transferAmount);
+    
+            // Registering Client and Freelancer wallets
+            await userContract.connect(client).registerUser("Client", "123 A Block B Street", false);
+            await userContract.connect(freelancer).registerUser("Freelancer", "456 C Block D Street", true);
+    
+            const title = "Software Developer";
+            const description = "Develop a DApp";
+            const payment = 1000;
+            const experienceLevel = "Intermediate";
+            const jobId = 0;
+
+            await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
+        
+            // Attempting to create a milestone by a non-client should revert
+            const milestoneAmount = 500;
+            const milestoneDescription = "First Milestone";
+            await expect(paymentContract.connect(freelancer).createMilestone(jobId, milestoneAmount, milestoneDescription))
+                .to.be.revertedWith("Only the client can create a milestone");
+
+            // Closing Job
+            await jobContract.connect(client).closeJob(jobId);
+
+            // Attempting to create a milestone should revert
+            await expect(paymentContract.connect(client).createMilestone(jobId, milestoneAmount, milestoneDescription))
+                .to.be.revertedWith("Job is not open");
+        });
+        
+        it("Should create multiple milestones for a single job", async function () {            
+            const { USDC, userContract, jobContract, paymentContract } = await deployFixture();
+            const [deployer, client, freelancer] = await ethers.getSigners();
+
+            const usdcDecimals = await USDC.decimals();
+            const transferAmount = BigInt(1000) * BigInt(10) ** usdcDecimals;
+            const paymentContAddress = await paymentContract.getAddress();
+
+            // Transfer some USDC to the client
+            await USDC.connect(deployer).transfer(client.address, transferAmount);
+
+            // Client approves PaymentManagement contract to spend USDC
+            await USDC.connect(client).approve(paymentContAddress, transferAmount);
+
+            // Registering Client and Freelancer wallets
+            await userContract.connect(client).registerUser("Client", "123 A Block B Street", false);
+            await userContract.connect(freelancer).registerUser("Freelancer", "456 C Block D Street", true);
+
+            const title = "Software Developer";
+            const description = "Develop a DApp";
+            const payment = 1000;
+            const experienceLevel = "Intermediate";
+            const jobId = 0;
+
+            await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
+
+            // Create multiple milestones
+            const milestoneAmount = 500;
+            await paymentContract.connect(client).createMilestone(jobId, milestoneAmount, "First Milestone");
+            await paymentContract.connect(client).createMilestone(jobId, milestoneAmount, "Second Milestone");
+
+            // Check that the milestones have been created
+            const milestones = await paymentContract.getMilestones(jobId); // Assuming a method to retrieve milestones
+            expect(milestones.length).to.equal(2);
+        });
+        
+        it("Should revert when creating a milestone with insufficient funds", async function () {
+            const { USDC, userContract, jobContract, paymentContract } = await deployFixture();
+            const [deployer, client, freelancer] = await ethers.getSigners();
+        
+            const usdcDecimals = await USDC.decimals();
+            const lowTransferAmount = BigInt(100) * BigInt(10) ** usdcDecimals;
+            const paymentContAddress = await paymentContract.getAddress();
+        
+            // Providing client with only 100 USDC and then registering
+            await USDC.connect(deployer).transfer(client.address, lowTransferAmount);        
+            await userContract.connect(client).registerUser("Client", "123 A Block B Street", false);
+
+            const title = "Software Developer";
+            const description = "Develop a DApp";
+            const payment = BigInt(1000) * BigInt(10) ** usdcDecimals;
+            const experienceLevel = "Intermediate";
+            const jobId = 0;
+            
+            // Creating a job requiring 1000 USDC
+            await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
+        
+            const milestoneAmount = BigInt(500) * BigInt(10) ** usdcDecimals;
+            const milestoneDescription = "First Milestone";
+
+            // Provide approval for the full milestone amount of 500
+            await USDC.connect(client).approve(paymentContAddress, milestoneAmount);
+        
+            // Attempting to create a milestone of value 500 when balance is 100 USDC
+            await expect(paymentContract.connect(client).createMilestone(jobId, milestoneAmount, milestoneDescription))
+                .to.be.revertedWith("Insufficient Balance");
+        });
+        
+        it("Should revert when creating a milestone with zero amount", async function () {
+            const { USDC, userContract, jobContract, paymentContract } = await deployFixture();
+            const [deployer, client, freelancer] = await ethers.getSigners();
+        
+            const usdcDecimals = await USDC.decimals();
+            const transferAmount = BigInt(1000) * BigInt(10) ** usdcDecimals;
+            const paymentContAddress = await paymentContract.getAddress();
+        
+            // Providing the client with sufficient funds to create a minestone
+            await USDC.connect(deployer).transfer(client.address, transferAmount);
+
+            await USDC.connect(client).approve(paymentContAddress, transferAmount);
+            await userContract.connect(client).registerUser("Client", "123 A Block B Street", false);
+        
+            const title = "Software Developer";
+            const description = "Develop a DApp";
+            const payment = 1000;
+            const experienceLevel = "Intermediate";
+            const jobId = 0;
+        
+            // Creating a Job
+            await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
+        
+            const milestoneDescription = "First Milestone";
+        
+            // Attempting to create a milestone with zero amount
+            await expect(paymentContract.connect(client).createMilestone(jobId, 0, milestoneDescription))
+                .to.be.revertedWith("Milestone amount must be greater than zero");
+        });
+    });
+
+    describe("Release Milestone", function () {
+
+        it("Should release a valid milestone", async function () {
+            // Set up the necessary contracts, accounts, and values
+            const { USDC, userContract, jobContract, paymentContract } = await deployFixture();
+            const [deployer, client, freelancer] = await ethers.getSigners();
+
+            const usdcDecimals = await USDC.decimals();
+            const transferAmount = BigInt(1000) * BigInt(10) ** usdcDecimals;
+            const paymentContAddress = await paymentContract.getAddress();
+        
+            // Providing the client with sufficient funds to create a minestone
+            await USDC.connect(deployer).transfer(client.address, transferAmount);
+
+            await USDC.connect(client).approve(paymentContAddress, transferAmount);
+            await userContract.connect(client).registerUser("Client", "123 A Block B Street", false);
+
+            const title = "Software Developer";
+            const description = "Develop a DApp";
+            const payment = 1000;
+            const experienceLevel = "Intermediate";
+            const jobId = 0;
+        
+            // Creating a Job
+            await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
+        
+            // Create a milestone for the job
+            const milestoneAmount = 500;
+            const milestoneDescription = "First Milestone";
+            await paymentContract.connect(client).createMilestone(jobId, milestoneAmount, milestoneDescription);
+        
+            // Get the milestoneId for the created milestone
+            const milestoneId = 0;
+        
+            // Get the freelancer's initial balance
+            const initialBalance = await USDC.balanceOf(freelancer.address);
+        
+            // Release the milestone
+            await paymentContract.connect(client).releaseMilestone(milestoneId, freelancer.address);
+        
+            // Verify that the milestone is marked as released
+            const milestone = await paymentContract.milestones(milestoneId);
+            expect(milestone.isReleased).to.equal(true);
+        
+            // Verify that the freelancer's balance has increased by the milestone amount
+            const finalBalance = await USDC.balanceOf(freelancer.address);
+            expect(finalBalance).to.equal(initialBalance + BigInt(milestoneAmount));
+        });
+        
+        it("Should revert if the milestone has already been released", async function () {
+            // Set up the necessary contracts, accounts, and values
+            const { USDC, userContract, jobContract, paymentContract } = await deployFixture();
+            const [deployer, client, freelancer] = await ethers.getSigners();
+        
+            const usdcDecimals = await USDC.decimals();
+            const transferAmount = BigInt(1000) * BigInt(10) ** usdcDecimals;
+            const paymentContAddress = await paymentContract.getAddress();
+        
+            // Providing the client with sufficient funds to create a minestone
+            await USDC.connect(deployer).transfer(client.address, transferAmount);
+            await USDC.connect(client).approve(paymentContAddress, transferAmount);
+            await userContract.connect(client).registerUser("Client", "123 A Block B Street", false);
+        
+            const title = "Software Developer";
+            const description = "Develop a DApp";
+            const payment = 1000;
+            const experienceLevel = "Intermediate";
+            const jobId = 0;
+        
+            // Creating a Job
+            await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
+        
+            // Create a milestone for the job
+            const milestoneAmount = 500;
+            const milestoneDescription = "First Milestone";
+            await paymentContract.connect(client).createMilestone(jobId, milestoneAmount, milestoneDescription);
+        
+            // Get the milestoneId for the created milestone
+            const milestoneId = 0;
+        
+            // Release the milestone for the first time
+            await paymentContract.connect(client).releaseMilestone(milestoneId, freelancer.address);
+        
+            // Verify that the milestone is marked as released
+            const milestone = await paymentContract.milestones(milestoneId);
+            expect(milestone.isReleased).to.equal(true);
+        
+            // Attempting to release the milestone again should revert
+            await expect(paymentContract.connect(client).releaseMilestone(milestoneId, freelancer.address))
+                .to.be.revertedWith("Milestone already released");
+        });
+
+        it("Should revert if the job associated with the milestone is not open", async function () {
+            // Set up the necessary contracts, accounts, and values
+            const { USDC, userContract, jobContract, paymentContract } = await deployFixture();
+            const [deployer, client, freelancer] = await ethers.getSigners();
+        
+            const usdcDecimals = await USDC.decimals();
+            const transferAmount = BigInt(1000) * BigInt(10) ** usdcDecimals;
+            const paymentContAddress = await paymentContract.getAddress();
+        
+            // Providing the client with sufficient funds to create a minestone
+            await USDC.connect(deployer).transfer(client.address, transferAmount);
+            await USDC.connect(client).approve(paymentContAddress, transferAmount);
+            await userContract.connect(client).registerUser("Client", "123 A Block B Street", false);
+        
+            const title = "Software Developer";
+            const description = "Develop a DApp";
+            const payment = 1000;
+            const experienceLevel = "Intermediate";
+            const jobId = 0;
+        
+            // Creating a Job
+            await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
+        
+            // Create a milestone for the job
+            const milestoneAmount = 500;
+            const milestoneDescription = "First Milestone";
+            await paymentContract.connect(client).createMilestone(jobId, milestoneAmount, milestoneDescription);
+        
+            // Get the milestoneId for the created milestone
+            const milestoneId = 0;
+        
+            // Close the job, assuming you have a method for this in the jobContract
+            await jobContract.connect(client).closeJob(jobId);
+        
+            // Attempting to release the milestone when the job is not open should revert
+            await expect(paymentContract.connect(client).releaseMilestone(milestoneId, freelancer.address))
+                .to.be.revertedWith("Job is not open");
+        });
+        
+        it("Should revert if the caller is not the client of the associated job", async function () {
+            // Set up the necessary contracts, accounts, and values
+            const { USDC, userContract, jobContract, paymentContract } = await deployFixture();
+            const [deployer, client, freelancer, anotherUser] = await ethers.getSigners(); // Including another user
+        
+            const usdcDecimals = await USDC.decimals();
+            const transferAmount = BigInt(1000) * BigInt(10) ** usdcDecimals;
+            const paymentContAddress = await paymentContract.getAddress();
+        
+            // Providing the client with sufficient funds to create a minestone
+            await USDC.connect(deployer).transfer(client.address, transferAmount);
+            await USDC.connect(client).approve(paymentContAddress, transferAmount);
+            await userContract.connect(client).registerUser("Client", "123 A Block B Street", false);
+        
+            const title = "Software Developer";
+            const description = "Develop a DApp";
+            const payment = 1000;
+            const experienceLevel = "Intermediate";
+            const jobId = 0;
+        
+            // Creating a Job
+            await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
+        
+            // Create a milestone for the job
+            const milestoneAmount = 500;
+            const milestoneDescription = "First Milestone";
+            await paymentContract.connect(client).createMilestone(jobId, milestoneAmount, milestoneDescription);
+        
+            // Get the milestoneId for the created milestone
+            const milestoneId = 0;
+        
+            // Attempting to release the milestone by a user who is not the client of the associated job should revert
+            await expect(paymentContract.connect(anotherUser).releaseMilestone(milestoneId, freelancer.address))
+                .to.be.revertedWith("Only the client can release a milestone");
+        });        
+    });
+
+    describe("Retrieve Milestone", function () {
+
+        it("Should return an empty array if there are no milestones for the given jobId", async function () {
+            // Set up the necessary contracts, accounts, and values
+            const { USDC, userContract, jobContract, paymentContract } = await deployFixture();
+            const [deployer, client, freelancer] = await ethers.getSigners();
+
+            const usdcDecimals = await USDC.decimals();
+            const transferAmount = BigInt(1000) * BigInt(10) ** usdcDecimals;
+            const paymentContAddress = await paymentContract.getAddress();
+
+            // Providing the client with sufficient funds to create a minestone
+            await USDC.connect(deployer).transfer(client.address, transferAmount);
+            await USDC.connect(client).approve(paymentContAddress, transferAmount);
+            await userContract.connect(client).registerUser("Client", "123 A Block B Street", false);
+        
+            const title = "Software Developer";
+            const description = "Develop a DApp";
+            const payment = 1000;
+            const experienceLevel = "Intermediate";
+        
+            // Creating a Job
+            await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
+        
+            // Fetch the jobId for the created job (assuming it's 0 for the first job)
+            const jobId = 0;
+        
+            // Get the milestones for the job using the getMilestones method
+            const milestones = await paymentContract.getMilestones(jobId);
+        
+            // Expect the result to be an empty array
+            expect(milestones.length).to.equal(0);
+        });
+        
+        it("Should return all the milestones for the given jobId", async function () {
+            // Set up the necessary contracts, accounts, and values
+            const { USDC, userContract, jobContract, paymentContract } = await deployFixture();
+            const [deployer, client, freelancer] = await ethers.getSigners();
+
+            const usdcDecimals = await USDC.decimals();
+            const transferAmount = BigInt(1000) * BigInt(10) ** usdcDecimals;
+            const paymentContAddress = await paymentContract.getAddress();
+
+            // Providing the client with sufficient funds to create a minestone
+            await USDC.connect(deployer).transfer(client.address, transferAmount);
+            await USDC.connect(client).approve(paymentContAddress, transferAmount);
+            await userContract.connect(client).registerUser("Client", "123 A Block B Street", false);
+        
+            const title = "Software Developer";
+            const description = "Develop a DApp";
+            const payment = 1000;
+            const experienceLevel = "Intermediate";
+        
+            // Creating a Job
+            await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
+        
+            const jobId = 0;
+        
+            // Create multiple milestones for the job
+            await paymentContract.connect(client).createMilestone(jobId, 500, "First Milestone");
+            await paymentContract.connect(client).createMilestone(jobId, 500, "Second Milestone");
+        
+            // Get the milestones for the job using the getMilestones method
+            const milestones = await paymentContract.getMilestones(jobId);
+        
+            // Expect the result to contain both milestones
+            expect(milestones.length).to.equal(2);
+            expect(milestones[0].description).to.equal("First Milestone");
+            expect(milestones[1].description).to.equal("Second Milestone");
         });
     });
 });

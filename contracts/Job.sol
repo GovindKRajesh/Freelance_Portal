@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import "./UserManagement.sol";
+import "./User.sol";
 
 contract JobManagement {
     
@@ -38,6 +38,13 @@ contract JobManagement {
         userManagement = UserManagement(_userManagementAddress);
     }
 
+    /**
+     * @dev Create a new job posting.
+     * @param title Title of the job.
+     * @param description Description of the job.
+     * @param payment Payment amount for the job.
+     * @param experienceLevel Required experience level for the job.
+     */
     function createJob(string memory title, string memory description, uint256 payment, string memory experienceLevel) public {
         require(userManagement.isUserRegistered(msg.sender), "User is not registered.");
         require(!userManagement.isUserFreelancer(msg.sender), "Freelancers cannot create jobs.");
@@ -48,6 +55,14 @@ contract JobManagement {
         jobCounter++;
     }
 
+    /**
+     * @dev Edit the details of an existing job posting.
+     * @param jobId ID of the job to be edited.
+     * @param title New title of the job.
+     * @param description New description of the job.
+     * @param payment New payment amount for the job.
+     * @param experienceLevel New required experience level for the job.
+     */
     function editJob(uint256 jobId, string memory title, string memory description, uint256 payment, string memory experienceLevel) public {
         require(jobs[jobId].clientAddress == msg.sender, "Only the client can edit the job.");
         require(jobs[jobId].isOpen, "Job must be open to edit.");
@@ -60,6 +75,10 @@ contract JobManagement {
         emit JobEdited(jobId, title);
     }
 
+     /**
+     * @dev Close an open job posting.
+     * @param jobId ID of the job to be closed.
+     */
     function closeJob(uint256 jobId) public {
         require(jobs[jobId].clientAddress == msg.sender, "Only the client can close the job.");
         require(jobs[jobId].isOpen, "Job is already closed.");
@@ -69,6 +88,10 @@ contract JobManagement {
         emit JobClosed(jobId);
     }
 
+     /**
+     * @dev Apply to an open job posting as a freelancer.
+     * @param jobId ID of the job to apply to.
+     */
     function applyToJob(uint256 jobId) public {
         require(userManagement.isUserFreelancer(msg.sender), "Only freelancers can apply.");
         require(jobs[jobId].isOpen, "Job is not open for applications.");
@@ -78,8 +101,12 @@ contract JobManagement {
         emit JobApplied(jobId, msg.sender);
     }
 
+     /**
+     * @dev View the details of a specific job posting by ID.
+     * @param jobId ID of the job to view.
+     * @return Job details as a Job struct.
+     */
     function viewJob(uint256 jobId) public view returns (Job memory) {
         return jobs[jobId];
     }
-    
 }
