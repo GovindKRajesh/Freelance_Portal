@@ -67,18 +67,19 @@ contract PaymentManagement {
     /**
      * @dev Release a specific milestone, transferring funds from this contract to the freelancer.
      * @param milestoneId ID of the milestone to release.
-     * @param freelancerAddress Address to send the released funds.
      */
-    function releaseMilestone(uint256 milestoneId, address freelancerAddress) public {
+    function releaseMilestone(uint256 milestoneId) public {
         require(!milestones[milestoneId].isReleased, "Milestone already released");
-
         uint256 jobId = milestones[milestoneId].jobId;
         JobManagement.Job memory job = jobManagement.viewJob(jobId);
         require(job.isOpen, "Job is not open");
         require(msg.sender == job.clientAddress, "Only the client can release a milestone");
+        address freelancerAddress = job.freelancerAddress;
 
+        // Releasing the milestone
         milestones[milestoneId].isReleased = true;
 
+        // Transferring the milestone amount to the freelancer
         uint256 amount = milestones[milestoneId].amount;
         require(stablecoin.transfer(freelancerAddress, amount), "Transfer failed");
 

@@ -13,6 +13,7 @@ contract JobManagement {
         uint256 payment; // Payment in USD
         string experienceLevel; // "Junior", "Mid", "Senior", etc.
         bool isOpen;
+        address freelancerAddress;
     }
 
     // Mapping to hold job postings by ID
@@ -33,6 +34,7 @@ contract JobManagement {
     event JobClosed(uint256 indexed jobId);
     event JobDeleted(uint256 jobId);
     event JobApplied(uint256 jobId, address freelancerAddress);
+    event FreelancerSelected(uint256 indexed jobId, address freelancerAddress);
     
     constructor(address _userManagementAddress) {
         userManagement = UserManagement(_userManagementAddress);
@@ -49,7 +51,7 @@ contract JobManagement {
         require(userManagement.isUserRegistered(msg.sender), "User is not registered.");
         require(!userManagement.isUserFreelancer(msg.sender), "Freelancers cannot create jobs.");
 
-        jobs[jobCounter] = Job(jobCounter, msg.sender, title, description, payment, experienceLevel, true);
+        jobs[jobCounter] = Job(jobCounter, msg.sender, title, description, payment, experienceLevel, true, address(0));
 
         emit JobCreated(jobCounter, title);
         jobCounter++;
@@ -75,7 +77,7 @@ contract JobManagement {
         emit JobEdited(jobId, title);
     }
 
-     /**
+    /**
      * @dev Close an open job posting.
      * @param jobId ID of the job to be closed.
      */
@@ -88,25 +90,89 @@ contract JobManagement {
         emit JobClosed(jobId);
     }
 
-     /**
+    /**
      * @dev Apply to an open job posting as a freelancer.
      * @param jobId ID of the job to apply to.
      */
     function applyToJob(uint256 jobId) public {
         require(userManagement.isUserFreelancer(msg.sender), "Only freelancers can apply.");
         require(jobs[jobId].isOpen, "Job is not open for applications.");
+        require(jobs[jobId].freelancerAddress == address(0), "Freelancer has already been selected for this job.");
 
         jobApplications[jobId].push(msg.sender);
 
         emit JobApplied(jobId, msg.sender);
     }
 
-     /**
+    /**
+     * @dev Select a freelancer for a job.
+     * @param jobId ID of the job.
+     * @param freelancerAddress Address of the freelancer.
+     */
+    function selectFreelancer(uint256 jobId, address freelancerAddress) public {
+        require(jobs[jobId].clientAddress == msg.sender, "Only the client can select the freelancer.");
+        require(jobs[jobId].isOpen, "Job must be open to select a freelancer.");
+
+        // Check that the freelancer has applied for the job
+        bool hasApplied = false;
+        for(uint i = 0; i < jobApplications[jobId].length; i++) {
+            if(jobApplications[jobId][i] == freelancerAddress) {
+                hasApplied = true;
+                break;
+            }
+        }
+        require(hasApplied, "Freelancer must have applied for the job.");
+
+        // Assigning freelancer to job
+        jobs[jobId].freelancerAddress = freelancerAddress;
+
+        // Delete all corresponding job applications for the selected job
+        delete jobApplications[jobId];
+
+        emit FreelancerSelected(jobId, freelancerAddress);
+    }
+
+    /**
      * @dev View the details of a specific job posting by ID.
      * @param jobId ID of the job to view.
      * @return Job details as a Job struct.
      */
     function viewJob(uint256 jobId) public view returns (Job memory) {
         return jobs[jobId];
+    }
+
+    /**
+     * @dev Get all open job postings.
+     * @return An array of Job structs representing all open jobs.
+     */
+    function getAllOpenJobs() public view returns (Job[] memory) {
+        // Determine the count of open jobs
+        uint256 openJobCount = 0;
+        for (uint256 i = 0; i < jobCounter; i++) {
+            if (jobs[i].isOpen && jobs[i].freelancerAddress == address(0)) {
+                openJobCount++;
+            }
+        }
+
+        // Collect all open jobs
+        Job[] memory openJobs = new Job[](openJobCount);
+        uint256 j = 0;
+        for (uint256 i = 0; i < jobCounter; i++) {
+            if (jobs[i].isOpen && jobs[i].freelancerAddress == address(0)) {
+                openJobs[j] = jobs[i];
+                j++;
+            }
+        }
+
+        return openJobs;
+    }
+
+    /**
+     * @dev Retrieves the list of freelancers who have applied for a specific job.
+     * @param jobId The ID of the job for which to retrieve the applications.
+     * @return An array of addresses representing the freelancers who have applied for the specified job.
+     */
+    function getJobApplications(uint256 jobId) public view returns (address[] memory) {
+        return jobApplications[jobId];
     }
 }

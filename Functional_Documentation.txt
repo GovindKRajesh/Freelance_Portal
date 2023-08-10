@@ -8,8 +8,37 @@ Contract side:
     - The isUserRegistered function checks if a user is registered on the platform or not.
     - The isUserFreelancer function checks if a user is a freelancer (true) or a client (false).
 
+    - Planned improvements:
+        - Adding a function to edit user details.
+        - Adding a rating system.
+
 2. Job contract:
-    -
-    -
-    -
-    
+    - This contract stores Job details, and is capable of creating, editing, closing and applying to jobs.
+    - The struct called Job stores the details for each job.
+    - The createJob function allows registered client users to create jobs.
+    - The editJob function allows the job's client to edit any detail of the posted job.
+    - The closeJob function allows the job's client to close the job. This prevents further applications.
+    - The applyToJob function allows freelancers to apply to open jobs that are not already assigned.
+    - The selectFreelance allows the open job's client to assign a freelancer to it, provided the said freelancer has applied. Also deletes all applications to the same job after selecting.
+    - The viewJob function allows anyone to retrieve a job by jobId.
+    - The getJobApplications function returns all the job applications for a specific jobId.
+
+    - Planned improvements:
+        - Allow withdrawal of applications by freelancers.
+
+3. Payment contract:
+    - The primary function of this contract is to manage milestones as well as the corresponding payments.
+    - The details of each milestone is Milestone struct, which is mapped against a Milestone ID, which is in turn mapped against Job ID. This is so that the same job can have multiple milestones.
+    - This contract makes use of IERC20.sol from Openzeppelin, for making use of ERC20 functions.
+    - The createMilestone function allows the open job's client to create a milestone against the said job. This requires the client to pay the milestone amount to the contract, which holds the funds until the milestone is complete.
+    - The releaseMilestone function allows the open job's client to essentially mark the milestone as completed. This triggers the transfer of the milestone amount from the contract to the associated freelancer who completed the milestone.
+    - The getMilestones function is used to fetch an array of all milestones linked to a specific jobId.
+
+    - Planned improvements:
+        - Add functions to edit or delete milestones before releasing.
+        - Add function to allow users to request release of milestone.
+
+4. USDC contract:
+    - This contract is a simple implementation of ERC20 that transfers a large amount of blank tokens to the deployer.
+    - These blank tokens can be used when running unit tests on the payment contract.
+    - This is only used for testing, and is not intended to be part of the final release.

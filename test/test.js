@@ -101,7 +101,7 @@ describe("Job", function () {
             const { userContract, jobContract } = await loadFixture(deployFixture);
             const [signer] = await hre.ethers.getSigners();
 
-            // Assuming a user is registered
+            // Registering the user as a client
             await userContract.registerUser("TestName", "123 A Block B Street", false);
             
             // Defining the parameters for the new job
@@ -339,6 +339,143 @@ describe("Job", function () {
         });
     });
 
+    describe("Select freelancer", function () {
+        it("Should select a freelancer for an open job and emit the appropriate event", async function () {
+            const { userContract, jobContract } = await loadFixture(deployFixture);
+            const [client, freelancer] = await hre.ethers.getSigners();
+    
+            // Registering the client and freelancer
+            await userContract.connect(client).registerUser("ClientName", "123 A Block B Street", false);
+            await userContract.connect(freelancer).registerUser("FreelancerName", "456 C Block D Street", true);
+    
+            // Creating a job as the client
+            const title = "Software Developer";
+            const description = "Develop a DApp";
+            const payment = 1000;
+            const experienceLevel = "Intermediate";
+            await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
+    
+            // Applying to the job as the freelancer
+            const jobId = 0; // assuming this is the correct job ID
+            await jobContract.connect(freelancer).applyToJob(jobId);
+    
+            // Selecting the freelancer for the job
+            await expect(jobContract.connect(client).selectFreelancer(jobId, freelancer.address))
+                .to.emit(jobContract, "FreelancerSelected")
+                .withArgs(jobId, freelancer.address);
+        });
+    
+        it("Should revert when a non-client tries to select a freelancer", async function () {
+            const { userContract, jobContract } = await loadFixture(deployFixture);
+            const [client, freelancer, otherUser] = await hre.ethers.getSigners();
+    
+            // Registering the client and freelancer
+            await userContract.connect(client).registerUser("ClientName", "123 A Block B Street", false);
+            await userContract.connect(freelancer).registerUser("FreelancerName", "456 C Block D Street", true);
+    
+            // Creating a job as the client
+            const title = "Software Developer";
+            const description = "Develop a DApp";
+            const payment = 1000;
+            const experienceLevel = "Intermediate";
+            await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
+    
+            // Applying to the job as the freelancer
+            const jobId = 0; // assuming this is the correct job ID
+            await jobContract.connect(freelancer).applyToJob(jobId);
+    
+            // Trying to select the freelancer as a different user should revert
+            await expect(jobContract.connect(otherUser).selectFreelancer(jobId, freelancer.address))
+                .to.be.revertedWith("Only the client can select the freelancer.");
+        });
+
+        it("Should revert when trying to select a freelancer for a closed job", async function () {
+            const { userContract, jobContract } = await loadFixture(deployFixture);
+            const [client, freelancer] = await hre.ethers.getSigners();
+        
+            // Registering the client and freelancer
+            await userContract.connect(client).registerUser("ClientName", "123 A Block B Street", false);
+            await userContract.connect(freelancer).registerUser("FreelancerName", "456 C Block D Street", true);
+        
+            // Creating a job as the client
+            const title = "Software Developer";
+            const description = "Develop a DApp";
+            const payment = 1000;
+            const experienceLevel = "Intermediate";
+            await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
+        
+            // Applying to the job as the freelancer
+            const jobId = 0; // assuming this is the correct job ID
+            await jobContract.connect(freelancer).applyToJob(jobId);
+        
+            // Closing the job
+            await jobContract.connect(client).closeJob(jobId);
+        
+            // Trying to select the freelancer for a closed job should revert
+            await expect(jobContract.connect(client).selectFreelancer(jobId, freelancer.address))
+                .to.be.revertedWith("Job must be open to select a freelancer.");
+        });
+
+        it("Should revert when trying to select a freelancer who has not applied for the job", async function () {
+            const { userContract, jobContract } = await loadFixture(deployFixture);
+            const [client, freelancer, otherFreelancer] = await hre.ethers.getSigners();
+        
+            // Registering the client and freelancers
+            await userContract.connect(client).registerUser("ClientName", "123 A Block B Street", false);
+            await userContract.connect(freelancer).registerUser("FreelancerName", "456 C Block D Street", true);
+            await userContract.connect(otherFreelancer).registerUser("OtherFreelancerName", "789 E Block F Street", true);
+        
+            // Creating a job as the client
+            const title = "Software Developer";
+            const description = "Develop a DApp";
+            const payment = 1000;
+            const experienceLevel = "Intermediate";
+            await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
+        
+            // Applying to the job as the freelancer
+            const jobId = 0; // assuming this is the correct job ID
+            await jobContract.connect(freelancer).applyToJob(jobId);
+        
+            // Trying to select a freelancer who has not applied for the job should revert
+            await expect(jobContract.connect(client).selectFreelancer(jobId, otherFreelancer.address))
+                .to.be.revertedWith("Freelancer must have applied for the job.");
+        });
+
+        it("Should select a freelancer for the job and delete all corresponding job applications", async function () {
+            const { userContract, jobContract } = await loadFixture(deployFixture);
+            const [client, freelancer] = await hre.ethers.getSigners();
+    
+            // Assuming client and freelancer are registered
+            await userContract.connect(client).registerUser("ClientName", "123 A Block B Street", false);
+            await userContract.connect(freelancer).registerUser("FreelancerName", "456 C Block D Street", true);
+    
+            // Defining the parameters for the new job
+            const title = "Software Developer";
+            const description = "Develop a DApp";
+            const payment = 1000;
+            const experienceLevel = "Intermediate";
+    
+            // Creating the job
+            await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
+    
+            // Applying to the job as a freelancer
+            await jobContract.connect(freelancer).applyToJob(0);
+    
+            // Selecting the freelancer for the job
+            await jobContract.connect(client).selectFreelancer(0, freelancer.address);
+    
+            // Getting the job details
+            const job = await jobContract.viewJob(0);
+    
+            // Check if the freelancer is selected for the job
+            expect(job.freelancerAddress).to.equal(freelancer.address);
+    
+            // Check if the corresponding job applications have been deleted
+            const applications = await jobContract.getJobApplications(0);
+            expect(applications.length).to.equal(0);
+        });
+    });
+
     describe("View Job", function () {
 
         it("Should return the details of a specific job by ID", async function () {
@@ -372,7 +509,7 @@ describe("Job", function () {
     });
 });
 
-describe("Create/Close milestones and make payment", function () {
+describe("Milestones and Payment", function () {
     async function deployFixture() {
         const [deployer] = await ethers.getSigners();
 
@@ -508,12 +645,19 @@ describe("Create/Close milestones and make payment", function () {
         
             // Get the milestoneId for the created milestone
             const milestoneId = 0;
+
+            // Applying to the job as the freelancer
+            await jobContract.connect(freelancer).applyToJob(jobId);
+
+            // Selecting the job application
+            await jobContract.connect(client).selectFreelancer(jobId, freelancer.address);
         
             // Get the freelancer's initial balance
             const initialBalance = await USDC.balanceOf(freelancer.address);
         
             // Release the milestone
-            await paymentContract.connect(client).releaseMilestone(milestoneId, freelancer.address);
+            await expect(paymentContract.connect(client).releaseMilestone(milestoneId))
+                .to.emit(paymentContract, "MilestoneReleased");
         
             // Verify that the milestone is marked as released
             const milestone = await paymentContract.milestones(milestoneId);
@@ -535,16 +679,22 @@ describe("Create/Close milestones and make payment", function () {
         
             // Get the milestoneId for the created milestone
             const milestoneId = 0;
+
+            // Applying to the job as the freelancer
+            await jobContract.connect(freelancer).applyToJob(jobId);
+
+            // Selecting the job application
+            await jobContract.connect(client).selectFreelancer(jobId, freelancer.address);
         
             // Release the milestone for the first time
-            await paymentContract.connect(client).releaseMilestone(milestoneId, freelancer.address);
+            await paymentContract.connect(client).releaseMilestone(milestoneId);
         
             // Verify that the milestone is marked as released
             const milestone = await paymentContract.milestones(milestoneId);
             expect(milestone.isReleased).to.equal(true);
         
             // Attempting to release the milestone again should revert
-            await expect(paymentContract.connect(client).releaseMilestone(milestoneId, freelancer.address))
+            await expect(paymentContract.connect(client).releaseMilestone(milestoneId))
                 .to.be.revertedWith("Milestone already released");
         });
 
@@ -559,12 +709,18 @@ describe("Create/Close milestones and make payment", function () {
         
             // Get the milestoneId for the created milestone
             const milestoneId = 0;
+
+            // Applying to the job as the freelancer
+            await jobContract.connect(freelancer).applyToJob(jobId);
+
+            // Selecting the job application
+            await jobContract.connect(client).selectFreelancer(jobId, freelancer.address);
         
             // Close the job, assuming you have a method for this in the jobContract
             await jobContract.connect(client).closeJob(jobId);
         
             // Attempting to release the milestone when the job is not open should revert
-            await expect(paymentContract.connect(client).releaseMilestone(milestoneId, freelancer.address))
+            await expect(paymentContract.connect(client).releaseMilestone(milestoneId))
                 .to.be.revertedWith("Job is not open");
         });
         
@@ -579,9 +735,15 @@ describe("Create/Close milestones and make payment", function () {
         
             // Get the milestoneId for the created milestone
             const milestoneId = 0;
+
+            // Applying to the job as the freelancer
+            await jobContract.connect(freelancer).applyToJob(jobId);
+
+            // Selecting the job application
+            await jobContract.connect(client).selectFreelancer(jobId, freelancer.address);
         
             // Attempting to release the milestone by a user who is not the client of the associated job should revert
-            await expect(paymentContract.connect(anotherUser).releaseMilestone(milestoneId, freelancer.address))
+            await expect(paymentContract.connect(anotherUser).releaseMilestone(milestoneId))
                 .to.be.revertedWith("Only the client can release a milestone");
         });        
     });
@@ -616,6 +778,41 @@ describe("Create/Close milestones and make payment", function () {
             expect(milestones.length).to.equal(2);
             expect(milestones[0].description).to.equal("First Milestone");
             expect(milestones[1].description).to.equal("Second Milestone");
+        });
+    });
+
+    describe("Get All Open Jobs", function() {
+
+        it("Should retrieve all open jobs with no freelancer selected", async function () {
+            const { userContract, jobContract } = await loadFixture(deployFixture);
+            const [signer] = await hre.ethers.getSigners();
+
+            // Assuming a user is registered
+            await userContract.registerUser("TestName", "123 A Block B Street", false);
+            
+            // Defining the parameters for new jobs
+            const title = "Software Developer";
+            const description = "Develop a DApp";
+            const payment = 1000;
+            const experienceLevel = "Intermediate";
+
+            // Creating multiple jobs
+            await jobContract.connect(signer).createJob(title, description, payment, experienceLevel);
+            await jobContract.connect(signer).createJob(title, description, payment, experienceLevel);
+
+            // Fetching all open jobs
+            const openJobs = await jobContract.getAllOpenJobs();
+
+            // Checking if the number of open jobs and their details are correct
+            expect(openJobs.length).to.equal(2);
+            for (const job of openJobs) {
+                expect(job.title).to.equal(title);
+                expect(job.description).to.equal(description);
+                expect(job.payment).to.equal(payment);
+                expect(job.experienceLevel).to.equal(experienceLevel);
+                expect(job.isOpen).to.be.true;
+                expect(job.freelancerAddress).to.equal("0x0000000000000000000000000000000000000000");
+            }
         });
     });
 });
