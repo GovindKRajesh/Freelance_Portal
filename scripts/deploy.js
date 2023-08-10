@@ -16,10 +16,14 @@ async function main() {
 
   console.log("Job deployed to:", job.target);
 
-  const USDC_ADDRESS = "0x7cd1840a123f2190424058Ba766F816Ad079e9A6"; // Dummy USDC token address
+  // Deploy USDC contract
+  const usdc = await hre.ethers.deployContract("USDC", []);
+  await usdc.waitForDeployment();
+
+  console.log("USDC deployed to:", usdc.target);
 
   // Deploy PaymentManagement contract
-  const payment = await hre.ethers.deployContract("PaymentManagement", [USDC_ADDRESS, job.target]);
+  const payment = await hre.ethers.deployContract("PaymentManagement", [usdc.target, job.target]);
   await payment.waitForDeployment();
 
   console.log("Payment deployed to:", payment.target);
