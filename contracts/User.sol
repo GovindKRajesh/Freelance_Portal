@@ -58,5 +58,4 @@ contract UserManagement {
     function isUserFreelancer(address userAddress) public view returns (bool) {
         return users[userAddress].isFreelancer;
     }
-    
 }

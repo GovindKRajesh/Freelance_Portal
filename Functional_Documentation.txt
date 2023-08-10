@@ -1,0 +1,15 @@
+Contract side:
+
+1. User contract: 
+    - This contract stores the details of each user, whether they are clients or freelancers, and information such as name, address, and contact info.
+    - The above details are stored in a struct mapping called users.
+    - The registerUser function is used to register new users to the platform. This takes all required details and stores it on the contract.
+    - The getUser function is a simple retrieval function that returns a user's details based on their wallet address.
+    - The isUserRegistered function checks if a user is registered on the platform or not.
+    - The isUserFreelancer function checks if a user is a freelancer (true) or a client (false).
+
+2. Job contract:
+    -
+    -
+    -
+    

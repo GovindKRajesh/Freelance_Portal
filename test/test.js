@@ -211,7 +211,6 @@ describe("Job", function () {
             await userContract.registerUser("TestName", "123 A Block B Street", false);
             await jobContract.connect(signer).createJob("Software Developer", "Develop a DApp", 1000, "Intermediate");
         
-            // Assuming the job is closed (you would typically have a method to close the job in your contract)
             // Closing the job
             await jobContract.connect(signer).closeJob(0);
         
@@ -375,7 +374,6 @@ describe("Job", function () {
 
 describe("Create/Close milestones and make payment", function () {
     async function deployFixture() {
-
         const [deployer] = await ethers.getSigners();
 
         // Deploying USDC.sol
@@ -400,67 +398,50 @@ describe("Create/Close milestones and make payment", function () {
         return { USDC, userContract, jobContract, paymentContract };
     }
 
+    async function basicSetup(amount, pay) {
+        const { USDC, userContract, jobContract, paymentContract } = await deployFixture();
+        const [deployer, client, freelancer, anotherUser] = await ethers.getSigners();
+
+        const usdcDecimals = await USDC.decimals();
+        const transferAmount = BigInt(amount) * BigInt(10) ** usdcDecimals;
+        const paymentContAddress = await paymentContract.getAddress();
+    
+        // Transfer some USDC to the client
+        await USDC.connect(deployer).transfer(client.address, transferAmount);
+    
+        // Client approves PaymentManagement contract to spend USDC
+        await USDC.connect(client).approve(paymentContAddress, transferAmount);
+    
+        // Registering Client and Freelancer wallets
+        await userContract.connect(client).registerUser("Client", "123 A Block B Street", false);
+        await userContract.connect(freelancer).registerUser("Freelancer", "456 C Block D Street", true);
+
+        const title = "Software Developer";
+        const payment = BigInt(pay) * BigInt(10) ** usdcDecimals;
+        const description = "Develop a DApp";
+        const experienceLevel = "Intermediate";
+        await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
+
+        return { USDC, userContract, jobContract, paymentContract, usdcDecimals, client, freelancer, anotherUser };
+    }
+
     describe("Create Milestone", function () {
         
         it("Should create a milestone for an open job", async function () {
-            const { USDC, userContract, jobContract, paymentContract } = await deployFixture();
-            const [deployer, client, freelancer] = await ethers.getSigners();
-
-            const usdcDecimals = await USDC.decimals();
-            const transferAmount = BigInt(1000) * BigInt(10) ** usdcDecimals;
-            const paymentContAddress = await paymentContract.getAddress();
-    
-            // Transfer some USDC to the client
-            await USDC.connect(deployer).transfer(client.address, transferAmount);
-    
-            // Client approves PaymentManagement contract to spend USDC
-            await USDC.connect(client).approve(paymentContAddress, transferAmount);
-    
-            // Registering Client and Freelancer wallets
-            await userContract.connect(client).registerUser("Client", "123 A Block B Street", false);
-            await userContract.connect(freelancer).registerUser("Freelancer", "456 C Block D Street", true);
-    
-            const title = "Software Developer";
-            const description = "Develop a DApp";
-            const payment = 1000;
-            const experienceLevel = "Intermediate";
-            await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
-            
+            const { USDC, userContract, jobContract, paymentContract, usdcDecimals, client } = await basicSetup(1000, 1000);
             const jobId = 0;
-            const milestoneAmount = 500;
+            const milestoneAmount = BigInt(500) * BigInt(10) ** usdcDecimals;
             const milestoneDescription = "First Milestone";
             await expect(paymentContract.connect(client).createMilestone(jobId, milestoneAmount, milestoneDescription))
                 .to.emit(paymentContract, "MilestoneCreated");
         });
 
         it("Should revert when creating a milestone for a closed job or using non-client", async function () {
-            const { USDC, userContract, jobContract, paymentContract } = await deployFixture();
-            const [deployer, client, freelancer] = await ethers.getSigners();
+            const { USDC, userContract, jobContract, paymentContract, usdcDecimals, client, freelancer } = await basicSetup(1000, 1000);
 
-            const usdcDecimals = await USDC.decimals();
-            const transferAmount = BigInt(1000) * BigInt(10) ** usdcDecimals;
-            const paymentContAddress = await paymentContract.getAddress();
-    
-            // Transfer some USDC to the client
-            await USDC.connect(deployer).transfer(client.address, transferAmount);
-    
-            // Client approves PaymentManagement contract to spend USDC
-            await USDC.connect(client).approve(paymentContAddress, transferAmount);
-    
-            // Registering Client and Freelancer wallets
-            await userContract.connect(client).registerUser("Client", "123 A Block B Street", false);
-            await userContract.connect(freelancer).registerUser("Freelancer", "456 C Block D Street", true);
-    
-            const title = "Software Developer";
-            const description = "Develop a DApp";
-            const payment = 1000;
-            const experienceLevel = "Intermediate";
-            const jobId = 0;
-
-            await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
-        
             // Attempting to create a milestone by a non-client should revert
-            const milestoneAmount = 500;
+            const jobId = 0;
+            const milestoneAmount = BigInt(500) * BigInt(10) ** usdcDecimals;
             const milestoneDescription = "First Milestone";
             await expect(paymentContract.connect(freelancer).createMilestone(jobId, milestoneAmount, milestoneDescription))
                 .to.be.revertedWith("Only the client can create a milestone");
@@ -474,33 +455,11 @@ describe("Create/Close milestones and make payment", function () {
         });
         
         it("Should create multiple milestones for a single job", async function () {            
-            const { USDC, userContract, jobContract, paymentContract } = await deployFixture();
-            const [deployer, client, freelancer] = await ethers.getSigners();
-
-            const usdcDecimals = await USDC.decimals();
-            const transferAmount = BigInt(1000) * BigInt(10) ** usdcDecimals;
-            const paymentContAddress = await paymentContract.getAddress();
-
-            // Transfer some USDC to the client
-            await USDC.connect(deployer).transfer(client.address, transferAmount);
-
-            // Client approves PaymentManagement contract to spend USDC
-            await USDC.connect(client).approve(paymentContAddress, transferAmount);
-
-            // Registering Client and Freelancer wallets
-            await userContract.connect(client).registerUser("Client", "123 A Block B Street", false);
-            await userContract.connect(freelancer).registerUser("Freelancer", "456 C Block D Street", true);
-
-            const title = "Software Developer";
-            const description = "Develop a DApp";
-            const payment = 1000;
-            const experienceLevel = "Intermediate";
-            const jobId = 0;
-
-            await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
+            const { USDC, userContract, jobContract, paymentContract, usdcDecimals, client } = await basicSetup(1000, 1000);
 
             // Create multiple milestones
-            const milestoneAmount = 500;
+            const jobId = 0;
+            const milestoneAmount = BigInt(500) * BigInt(10) ** usdcDecimals;
             await paymentContract.connect(client).createMilestone(jobId, milestoneAmount, "First Milestone");
             await paymentContract.connect(client).createMilestone(jobId, milestoneAmount, "Second Milestone");
 
@@ -510,28 +469,12 @@ describe("Create/Close milestones and make payment", function () {
         });
         
         it("Should revert when creating a milestone with insufficient funds", async function () {
-            const { USDC, userContract, jobContract, paymentContract } = await deployFixture();
-            const [deployer, client, freelancer] = await ethers.getSigners();
-        
-            const usdcDecimals = await USDC.decimals();
-            const lowTransferAmount = BigInt(100) * BigInt(10) ** usdcDecimals;
-            const paymentContAddress = await paymentContract.getAddress();
-        
-            // Providing client with only 100 USDC and then registering
-            await USDC.connect(deployer).transfer(client.address, lowTransferAmount);        
-            await userContract.connect(client).registerUser("Client", "123 A Block B Street", false);
+            const { USDC, userContract, jobContract, paymentContract, usdcDecimals, client } = await basicSetup(100, 1000);
 
-            const title = "Software Developer";
-            const description = "Develop a DApp";
-            const payment = BigInt(1000) * BigInt(10) ** usdcDecimals;
-            const experienceLevel = "Intermediate";
             const jobId = 0;
-            
-            // Creating a job requiring 1000 USDC
-            await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
-        
             const milestoneAmount = BigInt(500) * BigInt(10) ** usdcDecimals;
             const milestoneDescription = "First Milestone";
+            const paymentContAddress = await paymentContract.getAddress();
 
             // Provide approval for the full milestone amount of 500
             await USDC.connect(client).approve(paymentContAddress, milestoneAmount);
@@ -542,28 +485,8 @@ describe("Create/Close milestones and make payment", function () {
         });
         
         it("Should revert when creating a milestone with zero amount", async function () {
-            const { USDC, userContract, jobContract, paymentContract } = await deployFixture();
-            const [deployer, client, freelancer] = await ethers.getSigners();
-        
-            const usdcDecimals = await USDC.decimals();
-            const transferAmount = BigInt(1000) * BigInt(10) ** usdcDecimals;
-            const paymentContAddress = await paymentContract.getAddress();
-        
-            // Providing the client with sufficient funds to create a minestone
-            await USDC.connect(deployer).transfer(client.address, transferAmount);
-
-            await USDC.connect(client).approve(paymentContAddress, transferAmount);
-            await userContract.connect(client).registerUser("Client", "123 A Block B Street", false);
-        
-            const title = "Software Developer";
-            const description = "Develop a DApp";
-            const payment = 1000;
-            const experienceLevel = "Intermediate";
+            const { USDC, userContract, jobContract, paymentContract, usdcDecimals, client } = await basicSetup(1000, 1000);
             const jobId = 0;
-        
-            // Creating a Job
-            await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
-        
             const milestoneDescription = "First Milestone";
         
             // Attempting to create a milestone with zero amount
@@ -575,31 +498,11 @@ describe("Create/Close milestones and make payment", function () {
     describe("Release Milestone", function () {
 
         it("Should release a valid milestone", async function () {
-            // Set up the necessary contracts, accounts, and values
-            const { USDC, userContract, jobContract, paymentContract } = await deployFixture();
-            const [deployer, client, freelancer] = await ethers.getSigners();
+            const { USDC, userContract, jobContract, paymentContract, usdcDecimals, client, freelancer } = await basicSetup(1000, 1000);
 
-            const usdcDecimals = await USDC.decimals();
-            const transferAmount = BigInt(1000) * BigInt(10) ** usdcDecimals;
-            const paymentContAddress = await paymentContract.getAddress();
-        
-            // Providing the client with sufficient funds to create a minestone
-            await USDC.connect(deployer).transfer(client.address, transferAmount);
-
-            await USDC.connect(client).approve(paymentContAddress, transferAmount);
-            await userContract.connect(client).registerUser("Client", "123 A Block B Street", false);
-
-            const title = "Software Developer";
-            const description = "Develop a DApp";
-            const payment = 1000;
-            const experienceLevel = "Intermediate";
-            const jobId = 0;
-        
-            // Creating a Job
-            await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
-        
             // Create a milestone for the job
-            const milestoneAmount = 500;
+            const jobId = 0;
+            const milestoneAmount = BigInt(500) * BigInt(10) ** usdcDecimals;
             const milestoneDescription = "First Milestone";
             await paymentContract.connect(client).createMilestone(jobId, milestoneAmount, milestoneDescription);
         
@@ -622,30 +525,11 @@ describe("Create/Close milestones and make payment", function () {
         });
         
         it("Should revert if the milestone has already been released", async function () {
-            // Set up the necessary contracts, accounts, and values
-            const { USDC, userContract, jobContract, paymentContract } = await deployFixture();
-            const [deployer, client, freelancer] = await ethers.getSigners();
-        
-            const usdcDecimals = await USDC.decimals();
-            const transferAmount = BigInt(1000) * BigInt(10) ** usdcDecimals;
-            const paymentContAddress = await paymentContract.getAddress();
-        
-            // Providing the client with sufficient funds to create a minestone
-            await USDC.connect(deployer).transfer(client.address, transferAmount);
-            await USDC.connect(client).approve(paymentContAddress, transferAmount);
-            await userContract.connect(client).registerUser("Client", "123 A Block B Street", false);
-        
-            const title = "Software Developer";
-            const description = "Develop a DApp";
-            const payment = 1000;
-            const experienceLevel = "Intermediate";
-            const jobId = 0;
-        
-            // Creating a Job
-            await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
-        
+            const { USDC, userContract, jobContract, paymentContract, usdcDecimals, client, freelancer } = await basicSetup(1000, 1000);
+            
             // Create a milestone for the job
-            const milestoneAmount = 500;
+            const jobId = 0;
+            const milestoneAmount = BigInt(500) * BigInt(10) ** usdcDecimals;
             const milestoneDescription = "First Milestone";
             await paymentContract.connect(client).createMilestone(jobId, milestoneAmount, milestoneDescription);
         
@@ -665,30 +549,11 @@ describe("Create/Close milestones and make payment", function () {
         });
 
         it("Should revert if the job associated with the milestone is not open", async function () {
-            // Set up the necessary contracts, accounts, and values
-            const { USDC, userContract, jobContract, paymentContract } = await deployFixture();
-            const [deployer, client, freelancer] = await ethers.getSigners();
-        
-            const usdcDecimals = await USDC.decimals();
-            const transferAmount = BigInt(1000) * BigInt(10) ** usdcDecimals;
-            const paymentContAddress = await paymentContract.getAddress();
-        
-            // Providing the client with sufficient funds to create a minestone
-            await USDC.connect(deployer).transfer(client.address, transferAmount);
-            await USDC.connect(client).approve(paymentContAddress, transferAmount);
-            await userContract.connect(client).registerUser("Client", "123 A Block B Street", false);
-        
-            const title = "Software Developer";
-            const description = "Develop a DApp";
-            const payment = 1000;
-            const experienceLevel = "Intermediate";
-            const jobId = 0;
-        
-            // Creating a Job
-            await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
-        
+            const { USDC, userContract, jobContract, paymentContract, usdcDecimals, client, freelancer } = await basicSetup(1000, 1000);
+            
             // Create a milestone for the job
-            const milestoneAmount = 500;
+            const jobId = 0;
+            const milestoneAmount = BigInt(500) * BigInt(10) ** usdcDecimals;
             const milestoneDescription = "First Milestone";
             await paymentContract.connect(client).createMilestone(jobId, milestoneAmount, milestoneDescription);
         
@@ -704,30 +569,11 @@ describe("Create/Close milestones and make payment", function () {
         });
         
         it("Should revert if the caller is not the client of the associated job", async function () {
-            // Set up the necessary contracts, accounts, and values
-            const { USDC, userContract, jobContract, paymentContract } = await deployFixture();
-            const [deployer, client, freelancer, anotherUser] = await ethers.getSigners(); // Including another user
-        
-            const usdcDecimals = await USDC.decimals();
-            const transferAmount = BigInt(1000) * BigInt(10) ** usdcDecimals;
-            const paymentContAddress = await paymentContract.getAddress();
-        
-            // Providing the client with sufficient funds to create a minestone
-            await USDC.connect(deployer).transfer(client.address, transferAmount);
-            await USDC.connect(client).approve(paymentContAddress, transferAmount);
-            await userContract.connect(client).registerUser("Client", "123 A Block B Street", false);
-        
-            const title = "Software Developer";
-            const description = "Develop a DApp";
-            const payment = 1000;
-            const experienceLevel = "Intermediate";
-            const jobId = 0;
-        
-            // Creating a Job
-            await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
-        
+            const { USDC, userContract, jobContract, paymentContract, usdcDecimals, client, freelancer, anotherUser } = await basicSetup(1000, 1000);
+            
             // Create a milestone for the job
-            const milestoneAmount = 500;
+            const jobId = 0;
+            const milestoneAmount = BigInt(500) * BigInt(10) ** usdcDecimals;
             const milestoneDescription = "First Milestone";
             await paymentContract.connect(client).createMilestone(jobId, milestoneAmount, milestoneDescription);
         
@@ -743,31 +589,10 @@ describe("Create/Close milestones and make payment", function () {
     describe("Retrieve Milestone", function () {
 
         it("Should return an empty array if there are no milestones for the given jobId", async function () {
-            // Set up the necessary contracts, accounts, and values
-            const { USDC, userContract, jobContract, paymentContract } = await deployFixture();
-            const [deployer, client, freelancer] = await ethers.getSigners();
-
-            const usdcDecimals = await USDC.decimals();
-            const transferAmount = BigInt(1000) * BigInt(10) ** usdcDecimals;
-            const paymentContAddress = await paymentContract.getAddress();
-
-            // Providing the client with sufficient funds to create a minestone
-            await USDC.connect(deployer).transfer(client.address, transferAmount);
-            await USDC.connect(client).approve(paymentContAddress, transferAmount);
-            await userContract.connect(client).registerUser("Client", "123 A Block B Street", false);
-        
-            const title = "Software Developer";
-            const description = "Develop a DApp";
-            const payment = 1000;
-            const experienceLevel = "Intermediate";
-        
-            // Creating a Job
-            await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
-        
-            // Fetch the jobId for the created job (assuming it's 0 for the first job)
+            const { USDC, userContract, jobContract, paymentContract, usdcDecimals, client, freelancer } = await basicSetup(1000, 1000);
+            
+            // Get the milestones for the job
             const jobId = 0;
-        
-            // Get the milestones for the job using the getMilestones method
             const milestones = await paymentContract.getMilestones(jobId);
         
             // Expect the result to be an empty array
@@ -775,32 +600,14 @@ describe("Create/Close milestones and make payment", function () {
         });
         
         it("Should return all the milestones for the given jobId", async function () {
-            // Set up the necessary contracts, accounts, and values
-            const { USDC, userContract, jobContract, paymentContract } = await deployFixture();
-            const [deployer, client, freelancer] = await ethers.getSigners();
-
-            const usdcDecimals = await USDC.decimals();
-            const transferAmount = BigInt(1000) * BigInt(10) ** usdcDecimals;
-            const paymentContAddress = await paymentContract.getAddress();
-
-            // Providing the client with sufficient funds to create a minestone
-            await USDC.connect(deployer).transfer(client.address, transferAmount);
-            await USDC.connect(client).approve(paymentContAddress, transferAmount);
-            await userContract.connect(client).registerUser("Client", "123 A Block B Street", false);
-        
-            const title = "Software Developer";
-            const description = "Develop a DApp";
-            const payment = 1000;
-            const experienceLevel = "Intermediate";
-        
-            // Creating a Job
-            await jobContract.connect(client).createJob(title, description, payment, experienceLevel);
-        
+            const { USDC, userContract, jobContract, paymentContract, usdcDecimals, client, freelancer } = await basicSetup(1000, 1000);
+            
             const jobId = 0;
+            const milestoneAmount = BigInt(500) * BigInt(10) ** usdcDecimals;
         
             // Create multiple milestones for the job
-            await paymentContract.connect(client).createMilestone(jobId, 500, "First Milestone");
-            await paymentContract.connect(client).createMilestone(jobId, 500, "Second Milestone");
+            await paymentContract.connect(client).createMilestone(jobId, milestoneAmount, "First Milestone");
+            await paymentContract.connect(client).createMilestone(jobId, milestoneAmount, "Second Milestone");
         
             // Get the milestones for the job using the getMilestones method
             const milestones = await paymentContract.getMilestones(jobId);
